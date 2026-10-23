@@ -132,8 +132,11 @@ final class HealthReader {
                 }
             }
             store.execute(query)
-            // HealthKit caps steps at hourly no matter what is asked for.
-            store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
+            // Workouts wake the app right away. Steps and heart rate arrive in a steady
+            // trickle from the Watch, so hourly keeps background wake-ups (and battery) low;
+            // HealthKit caps steps at hourly anyway. Opening the app always syncs fully.
+            let frequency: HKUpdateFrequency = type == workoutType ? .immediate : .hourly
+            store.enableBackgroundDelivery(for: type, frequency: frequency) { _, _ in }
         }
     }
 

@@ -140,7 +140,7 @@ struct ContentView: View {
         } header: {
             Text("Sync")
         } footer: {
-            Text("Syncs when you open the app and in the background when Health gets new data (iOS allows steps about once an hour). Steps and heart rate are sent in 5-minute buckets. Health data can't be read while the iPhone is locked, so some syncs wait for the next unlock.")
+            Text("Syncs when you open the app and in the background when Health gets new data (steps and heart rate about once an hour, workouts right away). Steps and heart rate are sent in 5-minute buckets. Health data can't be read while the iPhone is locked, so some syncs wait for the next unlock.")
         }
     }
 
