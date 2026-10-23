@@ -1,0 +1,11 @@
+*.xcodeproj/
+NocturneHealth/Info.plist
+NocturneHealth/NocturneHealth.entitlements
+build/
+buildlog/
+*.ipa
+*.dSYM.zip
+*.mobileprovision
+fastlane/report.xml
+fastlane/README.md
+.DS_Store

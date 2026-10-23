@@ -1,0 +1,111 @@
+# Build NocturneHealth and upload it to TestFlight, using the same GitHub
+# secrets as the Loop/Trio Browser Build (TEAMID, GH_PAT, FASTLANE_KEY_ID,
+# FASTLANE_ISSUER_ID, FASTLANE_KEY, MATCH_PASSWORD).
+
+default_platform(:ios)
+
+TEAMID = ENV["TEAMID"]
+GH_PAT = ENV["GH_PAT"]
+GITHUB_WORKSPACE = ENV["GITHUB_WORKSPACE"]
+GITHUB_REPOSITORY_OWNER = ENV["GITHUB_REPOSITORY_OWNER"]
+FASTLANE_KEY_ID = ENV["FASTLANE_KEY_ID"]
+FASTLANE_ISSUER_ID = ENV["FASTLANE_ISSUER_ID"]
+FASTLANE_KEY = ENV["FASTLANE_KEY"]
+ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] = "120"
+
+# Unique to your developer team, the same pattern Trio uses.
+BUNDLE_ID = "com.#{TEAMID}.nocturnehealth"
+PROJECT = "#{GITHUB_WORKSPACE}/NocturneHealth.xcodeproj"
+
+def api_key!
+  app_store_connect_api_key(
+    key_id: FASTLANE_KEY_ID,
+    issuer_id: FASTLANE_ISSUER_ID,
+    key_content: FASTLANE_KEY
+  )
+end
+
+def match_auth
+  Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
+end
+
+platform :ios do
+  desc "Print the bundle ID to use when creating the app in App Store Connect"
+  lane :bundle_id do
+    UI.important("Bundle ID: #{BUNDLE_ID}")
+  end
+
+  desc "Register the bundle ID and create its App Store provisioning profile"
+  lane :identifiers do
+    setup_ci if ENV["CI"]
+    api_key!
+
+    bundle = Spaceship::ConnectAPI::BundleId.find(BUNDLE_ID) ||
+      Spaceship::ConnectAPI::BundleId.create(name: "Nocturne Health", identifier: BUNDLE_ID, platform: "IOS")
+    UI.success("Bundle ID ready: #{bundle.identifier}")
+
+    # HealthKit has to be on the App ID before the provisioning profile is made.
+    existing = bundle.get_capabilities.map(&:capability_type)
+    unless existing.include?(Spaceship::ConnectAPI::BundleIdCapability::Type::HEALTHKIT)
+      bundle.create_capability(Spaceship::ConnectAPI::BundleIdCapability::Type::HEALTHKIT)
+      UI.success("Turned on HealthKit for #{BUNDLE_ID}")
+    end
+
+    match(
+      type: "appstore",
+      readonly: false,
+      git_basic_authorization: match_auth,
+      app_identifier: [BUNDLE_ID]
+    )
+  end
+
+  desc "Build a signed IPA"
+  lane :build_app_ipa do
+    setup_ci if ENV["CI"]
+    key = api_key!
+
+    update_project_team(path: PROJECT, teamid: TEAMID)
+
+    previous = latest_testflight_build_number(app_identifier: BUNDLE_ID, api_key: key, initial_build_number: 0)
+    increment_build_number(xcodeproj: PROJECT, build_number: previous + 1)
+
+    match(
+      type: "appstore",
+      readonly: true,
+      git_basic_authorization: match_auth,
+      app_identifier: [BUNDLE_ID]
+    )
+    profile = Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING][BUNDLE_ID]
+
+    update_code_signing_settings(
+      path: PROJECT,
+      use_automatic_signing: false,
+      team_id: TEAMID,
+      bundle_identifier: BUNDLE_ID,
+      profile_name: profile,
+      code_sign_identity: "iPhone Distribution",
+      targets: ["NocturneHealth"]
+    )
+
+    gym(
+      project: PROJECT,
+      scheme: "NocturneHealth",
+      configuration: "Release",
+      export_method: "app-store",
+      export_options: { provisioningProfiles: { BUNDLE_ID => profile } },
+      output_name: "NocturneHealth.ipa",
+      destination: "generic/platform=iOS",
+      buildlog_path: "buildlog"
+    )
+  end
+
+  desc "Upload to TestFlight"
+  lane :release do
+    upload_to_testflight(
+      api_key: api_key!,
+      ipa: "NocturneHealth.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog: "Built from commit #{last_git_commit[:abbreviated_commit_hash]}"
+    )
+  end
+end

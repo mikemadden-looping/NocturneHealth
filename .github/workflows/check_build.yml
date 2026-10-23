@@ -1,0 +1,41 @@
+name: 0. Check build
+run-name: Check build (${{ github.ref_name }})
+
+# Compiles the app for the iOS Simulator on every push. Needs no secrets,
+# so it catches code errors before you spend a TestFlight build.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select --switch "$XCODE/Contents/Developer"
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Compile for Simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project NocturneHealth.xcodeproj -scheme NocturneHealth \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E "error:|warning: .*(deprecated|will be an error)|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-log
+          path: build.log

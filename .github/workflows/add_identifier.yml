@@ -1,0 +1,32 @@
+name: 1. Add identifier
+run-name: Add identifier
+
+# Run once. Registers the app's bundle ID with Apple and creates its
+# App Store provisioning profile in your Match-Secrets repository.
+on:
+  workflow_dispatch:
+
+jobs:
+  identifiers:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install fastlane
+        run: bundle install
+
+      - name: Sync clock
+        run: sudo sntp -sS time.windows.com
+
+      - name: Register bundle ID and profile
+        run: |
+          bundle exec fastlane identifiers
+          echo "### Next step" >> $GITHUB_STEP_SUMMARY
+          echo "In App Store Connect, create a new app with bundle ID **com.YOUR-TEAM-ID.nocturnehealth** (GitHub hides your team ID here), then run *2. Build to TestFlight*." >> $GITHUB_STEP_SUMMARY
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}

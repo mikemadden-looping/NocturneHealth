@@ -1,0 +1,60 @@
+name: 2. Build to TestFlight
+run-name: Build to TestFlight (${{ github.ref_name }})
+
+on:
+  workflow_dispatch:
+
+env:
+  TEAMID: ${{ secrets.TEAMID }}
+  GH_PAT: ${{ secrets.GH_PAT }}
+  MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+  FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+  FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+  FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - name: Check secrets
+        run: |
+          missing=""
+          for s in TEAMID GH_PAT MATCH_PASSWORD FASTLANE_KEY_ID FASTLANE_ISSUER_ID FASTLANE_KEY; do
+            [ -z "${!s}" ] && missing="$missing $s"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing. Add them under Settings → Secrets and variables → Actions (repository or organization)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select --switch "$XCODE/Contents/Developer"
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Install fastlane
+        run: bundle install
+
+      - name: Sync clock
+        run: sudo sntp -sS time.windows.com
+
+      - name: Build and sign
+        run: bundle exec fastlane build_app_ipa
+
+      - name: Upload to TestFlight
+        run: bundle exec fastlane release
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: buildlog
+          path: buildlog
