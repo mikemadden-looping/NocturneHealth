@@ -3,6 +3,8 @@ run-name: Build to TestFlight (${{ github.ref_name }})
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "57 8 * * 0"  # weekly rebuild (Sundays) so the TestFlight build never hits its 90-day expiry
 
 env:
   TEAMID: ${{ secrets.TEAMID }}
